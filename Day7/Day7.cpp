@@ -1,7 +1,10 @@
 #include <algorithm>
 #include <iostream>
 
+#define PART_2
+
 #include "DataDay7.h"
+
 using namespace std;
 
 int main(int argc, char* argv[])

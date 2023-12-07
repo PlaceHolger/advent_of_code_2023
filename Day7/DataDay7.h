@@ -5,6 +5,7 @@ constexpr int NUM_DIFFERENT_CARDS = std::size("AKQJT98765432");
 
 static int s_MaxEqualAmount;
 static int s_SecondMaxEqualAmount;
+static int s_JokerAmount;
 
 struct Hand
 {
@@ -13,13 +14,15 @@ struct Hand
         //calculate the score based on cards
         for (int i = NUM_CARDS - 1; i >= 0; --i)
         {
-            m_Cards[i] = cards[i];
+            //m_Cards[i] = cards[i];
             //we set a byte for the card value
             const unsigned char score = GetCardValue(cards[i]);
             m_Score |= score << ((NUM_CARDS - i - 1) * 4);
         }
 
         UpdateEqualAmount(cards);
+        s_MaxEqualAmount += s_JokerAmount;
+        
         //now we check for pairs, three of a kind, four of a kind, etc and add the bonus score for that
         if(s_MaxEqualAmount == 5) //five of a kind
         {
@@ -47,7 +50,7 @@ struct Hand
         }
     }	
 
-    char m_Cards[5]; //not needed for the solution, but nice to have for debugging
+    //char m_Cards[5]; //not needed for the solution, but nice to have for debugging
     int m_Bid;
     // byte 1-5: card value
     // bit 6: hand combination bonus
@@ -65,9 +68,11 @@ private:
 
         s_MaxEqualAmount = 0;
         s_SecondMaxEqualAmount = 0;
+        s_JokerAmount = 0;
 
-        for (int count : charCount)
+        for(int i = 1; i < NUM_DIFFERENT_CARDS; ++i)
         {
+            const int count = charCount[i];
             if (count >= s_MaxEqualAmount)
             {
                 s_SecondMaxEqualAmount = s_MaxEqualAmount;
@@ -77,7 +82,8 @@ private:
             {
                 s_SecondMaxEqualAmount = count;
             }
-        }        
+        }
+        s_JokerAmount = charCount[0];
     }
 
     static unsigned char GetCardValue(char card)
@@ -87,7 +93,11 @@ private:
             case 'A': return 13;
             case 'K': return 12;
             case 'Q': return 11;
+#if defined (PART_2)
+            case 'J': return 0;
+#else
             case 'J': return 10;
+#endif
             case 'T': return 9;
             case '9': return 8;
             case '8': return 7;
