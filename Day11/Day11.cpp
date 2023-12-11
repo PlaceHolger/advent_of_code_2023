@@ -19,7 +19,12 @@ std::vector<int> s_EmptyRows; // we store the empty rows and columns so we can o
 std::vector<int> s_EmptyColumns;
 std::vector<unsigned long long> s_DistancesBetweenGalaxies;
 
-constexpr int EMPTY_LINE_MULTIPLIER = 1000000;
+#define PART1 1
+#if PART1
+    constexpr int EMPTY_LINE_MULTIPLIER = 2; //one column/row turns into 2 columns/rows
+#else
+    constexpr int EMPTY_LINE_MULTIPLIER = 1000000;
+#endif
 
 void PrintMap()
 {
