@@ -5,9 +5,12 @@
 int NUM_COLUMNS = 0;
 int NUM_ROWS = 0;
 
+constexpr bool IS_PART_1 = false;
+
 int GetVerticalMirrorAxis(int pattern)
 {
-    bool IsNotMirrorAxis[32] = {false};
+    int mirrorMistakes[32] = {0};
+    constexpr int allowedMistakes = (IS_PART_1) ? 0 : 1;
 
     //const auto& currentData = s_Data[pattern];
 
@@ -16,7 +19,7 @@ int GetVerticalMirrorAxis(int pattern)
         const auto& row = s_Data[rowIndex];
         for (int i = 0; i < NUM_COLUMNS - 1; ++i)
         {
-            if(IsNotMirrorAxis[i])
+            if(mirrorMistakes[i] > allowedMistakes)
                 continue; //already known that this is not a mirror axis
             
             for (int offset = 0; offset < NUM_COLUMNS; ++offset)  //check in both direction is mirrored
@@ -27,7 +30,7 @@ int GetVerticalMirrorAxis(int pattern)
                     break;                
                 if(row[leftIndex] != row[rightIndex]) //different, so not mirrored
                 {
-                    IsNotMirrorAxis[i] = true;
+                    mirrorMistakes[i]++;
                     break;                    
                 }
             }
@@ -36,7 +39,7 @@ int GetVerticalMirrorAxis(int pattern)
 
     for (int i = 0; i < NUM_COLUMNS - 1; ++i)
     {
-        if(!IsNotMirrorAxis[i])
+        if(mirrorMistakes[i] == allowedMistakes)
             return i + 1;
     }
     return 0;
@@ -44,14 +47,15 @@ int GetVerticalMirrorAxis(int pattern)
 
 int GetHorizontalMirrorAxis(int pattern)
 {
-    bool IsNotMirrorAxis[32] = {false};
+    int mirrorMistakes[32] = {0};
+    constexpr  int allowedMistakes = (IS_PART_1) ? 0 : 1;
     //const auto& currentData = s_Data[pattern];
 
     for (int i = 0; i < NUM_COLUMNS; ++i)
     {
         for (int j = 0; j < NUM_ROWS; ++j)
         {
-            if(IsNotMirrorAxis[j])
+            if(mirrorMistakes[j] > allowedMistakes)
                 continue; //already known that this is not a mirror axis
             
             for (int offset = 0; offset < NUM_ROWS; ++offset)  //check in both direction is mirrored
@@ -62,7 +66,7 @@ int GetHorizontalMirrorAxis(int pattern)
                     break;                
                 if(s_Data[pattern + topIndex][i] != s_Data[pattern + bottomOffset][i]) //different, so not mirrored
                 {
-                    IsNotMirrorAxis[j] = true;
+                    mirrorMistakes[j]++;
                     break;                    
                 }
             }
@@ -71,7 +75,7 @@ int GetHorizontalMirrorAxis(int pattern)
 
     for (int i = 0; i < NUM_ROWS - 1; ++i)
     {
-        if(!IsNotMirrorAxis[i])
+        if(mirrorMistakes[i] == allowedMistakes)
             return i + 1;
     }
     return 0;
