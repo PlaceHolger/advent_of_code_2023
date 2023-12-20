@@ -76,9 +76,14 @@ using RulesList = std::vector<std::unique_ptr<IRuleEvaluator>>;
 std::map<int, RulesList> s_Workflows;
 std::map<int, std::string> s_WorkflowHashes; //for debug display
 
-
 int MakeWorkflowHash(const char name[4])
 {
+    if(name[1] == '\0')
+        return name[0] << 24;
+    if(name[2] == '\0')
+        return name[0] << 24 | name[1] << 16 ;
+    if(name[3] == '\0')
+        return name[0] << 24 | name[1] << 16 | name[2] << 8;
     return name[0] << 24 | name[1] << 16 | name[2] << 8 | name[3];
 }
 
@@ -87,13 +92,10 @@ void TrimWorkflowName(char workflowName[4], char trimChar = ',')
     if(workflowName[1] == trimChar)
     {
         workflowName[1] = '\0';
-        workflowName[2] = 0;
-        workflowName[3] = 0;
     }
     else if(workflowName[2] == trimChar)
     {
         workflowName[2] = '\0';
-        workflowName[3] = 0;
     }
     else if(workflowName[3] == trimChar)
         workflowName[3] = '\0';
@@ -116,8 +118,6 @@ void ParseWorkflow(const char* line)
     //parse the rules, Rules have a format like: "a<2006:qkq,m>2090:A,rfg"
     // The first part is the data (from the product) to check, the second part is the rule evaluator, the third part is the next workflow to execute. The blocks are separated by a comma.
     // at the end of all rules is always one workflow name, which is the workflow to execute if no rule matches
-
-    
     const char* p_RuleToken = RulesBuffer;
     while (*p_RuleToken != '\0')
     {
@@ -172,7 +172,6 @@ void ParseWorkflow(const char* line)
             case '!':
                 rules.emplace_back(std::make_unique<AlwaysEvalRuleEvaluator>(nextHash));
             break;
-                
             default:
                 assert(false && "Invalid rule evaluator");
         }
@@ -200,7 +199,8 @@ const int s_RejectWorkflow = MakeWorkflowHash("R");
 
 void ExecuteWorkflow(int currentWorkflow, const Product* p_Product)
 {
-    std::string debugName = s_WorkflowHashes[currentWorkflow];
+    //std::string debugName = s_WorkflowHashes[currentWorkflow];
+    assert(s_Workflows.find(currentWorkflow) != s_Workflows.end() && "Invalid workflow hash");
     
     //the steps are: fetch the current workflow, execute the rules, fetch the next workflow, repeat unless it is the accept or reject workflow
     auto& workflowRules = s_Workflows[currentWorkflow];
@@ -213,10 +213,7 @@ void ExecuteWorkflow(int currentWorkflow, const Product* p_Product)
         if(nextWorkflow == s_RejectWorkflow)
             return;
         if (nextWorkflow != -1)
-        {
-            ExecuteWorkflow(nextWorkflow, p_Product);
-            return;
-        }
+            return ExecuteWorkflow(nextWorkflow, p_Product);
         assert(nextWorkflow == -1 && "Invalid workflow hash");
     }
     AcceptedProducts.push_back(const_cast<Product*>(p_Product)); //default accept
@@ -226,9 +223,8 @@ int main(int argc, char* argv[])
 {
     //parse the data
     bool parseProducts = false;
-    for (unsigned int lineIndex = 0; lineIndex < NUM_ROWS; ++lineIndex)
+    for (const auto line : s_Data)
     {
-        const char* line = s_Data[lineIndex];
         if (line == nullptr || line[0] == '\0')
             parseProducts = true; // the workflows and the products are separated by an empty line
         else if(!parseProducts)
@@ -249,7 +245,7 @@ int main(int argc, char* argv[])
     {
         sum += product->data[0] + product->data[1] + product->data[2] + product->data[3];
     }
-    std::cout << "Sum of all accepted products: " << sum << std::endl;
+    std::cout << "Sum of all accepted products: " << sum << std::endl;  //Remark: BUGGY, the result is too high, 324360  too low, 353638 too high
 
     return 0;
 }
