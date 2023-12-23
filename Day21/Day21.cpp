@@ -1,7 +1,5 @@
-#include <complex.h>
 #include <iostream>
-#include <set>
-#include <vector>
+#include <unordered_set>
 
 #include "DataDay21.h"
 
@@ -14,18 +12,20 @@ struct Position
     {
         return x == other.x && y == other.y;
     }
+};
 
-    bool operator<(const Position& other) const
+struct Hash {
+    size_t operator()(const Position &pos) const
     {
-        return y * NUM_COLUMNS + x < other.y * NUM_COLUMNS + other.x;
+        return pos.x + pos.y * NUM_COLUMNS;
     }
 };
 
-std::set<Position> s_ReachablePositions;
-std::set<Position> s_ReachablePositions2;
+std::unordered_set<Position, Hash> s_ReachablePositions;
+std::unordered_set<Position, Hash> s_ReachablePositions2;
 
-std::set<Position>& currentPositions = s_ReachablePositions;
-std::set<Position>& lastStepPositions = s_ReachablePositions2;
+std::unordered_set<Position, Hash>& currentPositions = s_ReachablePositions;
+std::unordered_set<Position, Hash>& lastStepPositions = s_ReachablePositions2;
 
 Position FindStartPosition()
 {
@@ -39,6 +39,7 @@ Position FindStartPosition()
             }
         }
     }
+    return { -1, -1 };
 }
 
 void FindReachablePositions()
@@ -83,7 +84,7 @@ void PrintMap(int step)
             else
                 std::cout << "\033[1;32m" << s_Data[y][x] << "\033[0m";
         }
-        std::cout << std::endl;
+        std::cout << "\n";
     }
     std::cout << "Step " << step << ": NumPositions: " << currentPositions.size() << std::endl;
 }
@@ -97,7 +98,7 @@ int main(int argc, char* argv[])
     for (int step = 0; step < NUM_STEPS; ++step)
     {
         FindReachablePositions();
-        //PrintMap(step);
+        PrintMap(step);
     }
 
     std::cout << "After " << NUM_STEPS+1 << "steps: NumPositions: " << currentPositions.size() << std::endl;
