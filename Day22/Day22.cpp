@@ -5,6 +5,10 @@
 
 #include "DataDay22.h"
 
+using BlockList = std::unordered_set<int>;
+std::map<int, BlockList> blockBeneath;
+std::map<int, BlockList> blockAbove;
+
 void PrintField(const Block blocksToPrint[], int max[3])
 {
     //we have 3d blocks, but we display it 2d, so we display it in z direction, z is vertical, x and y are horizontal
@@ -97,6 +101,70 @@ int GetIndex(int x, int y, int z)
 int& GetBlockIndex(int x, int y, int z)
 {
     return field[GetIndex(x, y, z)];
+}
+
+int CountStonesThatCanBeRemoved(Block sortedBlocks[NUM_BLOCKS])
+{
+    int stonesToRemove = 0;
+    for (int i = 0; i < NUM_BLOCKS; ++i)
+    {
+        bool canBeRemoved = true;
+        //const Block& block = sortedBlocks[i];
+        const auto it = blockAbove.find(i);
+        if(it != blockAbove.end())
+        {
+            for (auto aboveIndex  : it->second)
+            {
+                const auto it2 = blockBeneath.find(aboveIndex);
+                assert(it2 != blockBeneath.end());
+                if(it2->second.size() <= 1) 
+                {
+                    canBeRemoved = false;
+                    break;
+                }
+            }
+        }
+        if(canBeRemoved)
+            stonesToRemove++;
+    }
+    return stonesToRemove;
+}
+
+void GetDependedBlocks(int index, std::unordered_set<int>& list)
+{
+    list.insert(index);
+    const auto it = blockAbove.find(index);
+    if(it != blockAbove.end())
+    {
+        for (auto aboveIndex  : it->second)
+        {
+            const auto it2 = blockBeneath.find(aboveIndex);
+            bool allInclude = true;
+            for (auto value : it2->second) //expensive way to check if all contained
+                if(list.find(value) == list.end())
+                {
+                    allInclude = false;
+                    break;
+                }
+            if(allInclude) 
+            {
+                GetDependedBlocks(it2->first, list);
+            }
+        }
+    }
+}
+
+unsigned int CountChainReaction(Block sortedBlocks[NUM_BLOCKS])
+{
+    unsigned int chainReaction = 0;
+    std::unordered_set<int> list;
+    for (int i = 0; i < NUM_BLOCKS; ++i)
+    {
+        list.clear();
+        GetDependedBlocks(i, list);
+        chainReaction += list.size();
+    }
+    return chainReaction;
 }
 
 int main(int argc, char* argv[])
@@ -209,16 +277,11 @@ int main(int argc, char* argv[])
         }
     }
 
-    //now we print the field
     PrintField(sortedBlocks, max);
 
-    std::map<int, int> blockBeneath;
-    std::map<int, int> blocksAbove;
-    std::unordered_set<int> uniqueBlocks;
-    //we iterate through the sorted list and check for each block how many different blocks are beneath it and store it in a map
+    //now we create a map of all blocks that are beneath a specific block
     for (int i = 0; i < NUM_BLOCKS; ++i)
     {
-        uniqueBlocks.clear();
         const Block& block = sortedBlocks[i];
         const int lowestZ = std::min(block.start[2], block.end[2]);
         for (int x = block.start[0]; x <= block.end[0]; ++x)
@@ -228,40 +291,35 @@ int main(int argc, char* argv[])
                 const int blockIndex = GetBlockIndex(x, y, lowestZ-1);
                 if (blockIndex != -1)
                 {
-                    uniqueBlocks.insert(blockIndex);
+                    blockBeneath[i].insert(blockIndex);
                  }
             }
         }
-        blockBeneath[i] = uniqueBlocks.size();
     }
 
-    //now we do it again, but this time we want to find above us
-    int stonesToMove = 0;
+    //now we do it again, but this time we want to find above each block
     for (int i = 0; i < NUM_BLOCKS; ++i)
     {
-        bool canBeRemoved = true;
         const Block& block = sortedBlocks[i];
-        int highestZ = std::max(block.start[2], block.end[2]);
+        const int highestZ = std::max(block.start[2], block.end[2]);
         for (int x = block.start[0]; x <= block.end[0]; ++x)
         {
             for (int y = block.start[1]; y <= block.end[1]; ++y)
             {
                 const int blockIndex = GetBlockIndex(x, y, highestZ + 1);
-                if (blockIndex != -1) //check if there is a block above us, if so...
+                if (blockIndex != -1)
                 {
-                    assert(blockBeneath[blockIndex] > 0);
-                    if(blockBeneath[blockIndex] <= 1) 
-                    {
-                        canBeRemoved = false;
-                        break;
-                    }
+                    blockAbove[i].insert(blockIndex);
                 }
             }
         }
-        if(canBeRemoved)
-            stonesToMove++;
     }
     
-    std::cout << "Stones to move: " << stonesToMove << std::endl;
+    int stonesToRemove = CountStonesThatCanBeRemoved(sortedBlocks);
+    std::cout << "Stones that can be removed: " << stonesToRemove << std::endl;
+
+    unsigned int chainReaction = CountChainReaction(sortedBlocks);
+    std::cout << "Chain Reaction: " << chainReaction << std::endl;
+
     return 0;
 }

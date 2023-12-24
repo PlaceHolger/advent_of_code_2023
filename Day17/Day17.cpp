@@ -1,3 +1,4 @@
+#include <cassert>
 #include <iostream>
 #include <list>
 #include <vector>
@@ -11,8 +12,10 @@ enum class Direction : char
     Right,
     Up,
     Down,
-    NONE
+    NONE,
 };
+
+constexpr int MAX_SAME_DIRECTION = 3;
 
 struct Node
 {
@@ -20,12 +23,14 @@ struct Node
     int posY;
     unsigned int cost = -1; //cost to get to this node
     Node* prev = nullptr; //previous node
-    Direction lastDirections[3] = { Direction::NONE, Direction::NONE, Direction::NONE}; //last 3 directions taken to get to this node
+    Direction lastDirections[MAX_SAME_DIRECTION] = { Direction::NONE, Direction::NONE, Direction::NONE }; //last 3 directions taken to get to this node
 };
 
-std::vector<Node> nodes;
-std::list<Node*> openList;
-std::list<Node*> closedList;
+constexpr int NUM_DIRECTIONS = 4;
+
+std::vector<Node> nodes[MAX_SAME_DIRECTION][NUM_DIRECTIONS]; //for our task we assume each position exist in 3 different states, depending on the last 3 directions taken to get to it.
+std::vector<Node*> openList;
+std::vector<Node*> closedList;
 
 Node* GetLowestCostNode(bool pop = true)
 {
@@ -47,6 +52,11 @@ Node* GetLowestCostNode(bool pop = true)
     return p_LowestCostNode;
 }
 
+// bool operator==(const Node& lhs, const Node& rhs) //REMARK: we are just comparing the position here, not the lastDirections
+// {
+//     return lhs.posX == rhs.posX && lhs.posY == rhs.posY;
+// }
+
 char GetCharForDirection(const Direction& dir)
 {
     switch (dir)
@@ -59,32 +69,42 @@ char GetCharForDirection(const Direction& dir)
             return '^';
         case Direction::Down:
             return 'v';
+        case Direction::NONE:
+            return '!';
         default:
             return '?';
     }
 }
 
-void PrintMapWithPath(const Node* const p_FirstNode = nullptr, const Node* const p_TargetNode = nullptr)
+void PrintMapWithPath(const Node* const p_TargetNode = nullptr)
 {
     //first we calculate the path, because we want to print the path in red
     std::vector<const Node*> path;
     const Node* p_CurrentNode = p_TargetNode;
-    while (p_CurrentNode != p_FirstNode)
+    while (p_CurrentNode)
     {
         path.push_back(p_CurrentNode);
         p_CurrentNode = p_CurrentNode->prev;
     }
-    path.push_back(p_FirstNode);
-
+    
     for (int y = 0; y < NUM_ROWS; ++y)
     {
         for (int x = 0; x < NUM_COLUMNS; ++x)
         {
-            //check if the node is part of the path, than we print it red and print its direction
-            const auto pathIt = std::find(path.begin(), path.end(), &nodes[y * NUM_COLUMNS + x]);
-            if (pathIt != path.end())
+            //check if the node is part of the path (if we have a node with these x and y), than we print it red and print its direction
+            const Node* p_PathNode = nullptr;
+            for (const auto curNode : path)
             {
-                std::cout << "\033[1;31m " << GetCharForDirection((*pathIt)->lastDirections[2]);
+                if(curNode->posX == x && curNode->posY == y)
+                {
+                    p_PathNode = curNode;
+                    break;
+                }
+            }
+            
+            if (p_PathNode)
+            {
+                std::cout << "\033[1;31m " << GetCharForDirection(p_PathNode->lastDirections[2]);
             }
             else 
                 std::cout << "\033[0m " << s_Data[y][x];
@@ -94,21 +114,30 @@ void PrintMapWithPath(const Node* const p_FirstNode = nullptr, const Node* const
     std::cout << "__________________" << std::endl;
 }
 
-void PrintMap()
+void PrintMap(int highlightX = -1, int highlightY = -1)
 {
     for (int y = 0; y < NUM_ROWS; ++y)
     {
         for (int x = 0; x < NUM_COLUMNS; ++x)
         {
-            //check if the node is in the open list, than we print it green
-            const bool isInOpen = std::find(openList.begin(), openList.end(), &nodes[y * NUM_COLUMNS + x]) != openList.end();
-            //check if the node is in the closed list, than we print it red
-            const auto closeListIt = std::find(closedList.begin(), closedList.end(), &nodes[y * NUM_COLUMNS + x]);
-            
-            if (isInOpen)
+            bool isInOpen = false;
+            bool isInClosed = false;
+
+            for(int i = 0; i < MAX_SAME_DIRECTION; ++i)
+            {
+                for(int j = 0; j < NUM_DIRECTIONS; ++j)
+                {
+                    isInOpen |= std::find(openList.begin(), openList.end(), &nodes[i][j][y * NUM_COLUMNS + x]) != openList.end();
+                    isInClosed |= std::find(closedList.begin(), closedList.end(), &nodes[i][j][y * NUM_COLUMNS + x]) != closedList.end();
+                }
+            }
+
+            if(x == highlightX && y == highlightY)
+                std::cout << "\033[1;33m " << s_Data[y][x];
+            else if (isInOpen)
                 std::cout << "\033[1;32m " << s_Data[y][x];
-            else if (closeListIt != closedList.end())
-                std::cout << "\033[1;31m " << GetCharForDirection((*closeListIt)->lastDirections[2]);
+            else if (isInClosed)
+                std::cout << "\033[1;31m " << s_Data[y][x];
             else 
                 std::cout << "\033[0m " << s_Data[y][x];
         }
@@ -117,16 +146,38 @@ void PrintMap()
     std::cout << "__________________" << std::endl;
 }
 
-void CalculatePath(const Node* const p_TargetNode)
+int CalcNumSameDirections(const Node* p_CurrentNode)
 {
+    int numSameDirection = 0;
+    for (int i = MAX_SAME_DIRECTION - 1; i >= 1; --i)
+    {
+        if (p_CurrentNode->lastDirections[i] != Direction::NONE && p_CurrentNode->lastDirections[i] == p_CurrentNode->lastDirections[i - 1])
+            ++numSameDirection;
+        else
+            break;
+    }
+    return numSameDirection;
+}
+
+void CalculatePath(int startX, int startY, int targetX, int targetY)
+{
+    //add the first node to the open list
+    Node* const p_FirstNode = &nodes[0][(int)Direction::Right][startY * NUM_COLUMNS + startX];
+    p_FirstNode->cost = 0;
+    Node* const p_FirstNode2 = &nodes[0][(int)Direction::Down][startY * NUM_COLUMNS + startX];
+    p_FirstNode2->cost = 0;
+    //p_FirstNode->lastDirections[2] = Direction::Right;
+    openList.push_back(p_FirstNode);
+    openList.push_back(p_FirstNode2);
+    
     //now we are using Dijkstra's algorithm to find the shortest path, but with the added constraint that we can't go more than 3 steps in the same direction
     while (!openList.empty())
     {
-        PrintMap();
-        
         Node* p_CurrentNode = GetLowestCostNode();
 
-        if (p_CurrentNode == p_TargetNode)
+        //PrintMap(p_CurrentNode->posX, p_CurrentNode->posY);
+
+        if (p_CurrentNode->posX == targetX && p_CurrentNode->posY == targetY)
         {
             //we found the shortest path
             break;
@@ -134,17 +185,59 @@ void CalculatePath(const Node* const p_TargetNode)
 
         //add the current node to the closed list
         closedList.push_back(p_CurrentNode);
+        //we count how many times we went in the same direction, we do so by starting at the end of the lastDirections array and going back until we find a different direction
+        const int numSameDirection = CalcNumSameDirections(p_CurrentNode);
+        const int lastDir = static_cast<int>(p_CurrentNode->lastDirections[2]);
 
         //get the current node's neighbours
         Node* p_Neighbours[4] = { nullptr, nullptr, nullptr, nullptr };
         if (p_CurrentNode->posX > 0) //left
-            p_Neighbours[0] = &nodes[(p_CurrentNode->posY) * NUM_COLUMNS + (p_CurrentNode->posX - 1)];
+            p_Neighbours[0] = &nodes[numSameDirection][lastDir][(p_CurrentNode->posY) * NUM_COLUMNS + (p_CurrentNode->posX - 1)];
         if (p_CurrentNode->posX < NUM_COLUMNS - 1) //right
-            p_Neighbours[1] = &nodes[(p_CurrentNode->posY) * NUM_COLUMNS + (p_CurrentNode->posX + 1)];
+            p_Neighbours[1] = &nodes[numSameDirection][lastDir][(p_CurrentNode->posY) * NUM_COLUMNS + (p_CurrentNode->posX + 1)];
         if (p_CurrentNode->posY > 0) //up
-            p_Neighbours[2] = &nodes[(p_CurrentNode->posY - 1) * NUM_COLUMNS + (p_CurrentNode->posX)];
+            p_Neighbours[2] = &nodes[numSameDirection][lastDir][(p_CurrentNode->posY - 1) * NUM_COLUMNS + (p_CurrentNode->posX)];
         if (p_CurrentNode->posY < NUM_ROWS - 1) //down
-            p_Neighbours[3] = &nodes[(p_CurrentNode->posY + 1) * NUM_COLUMNS + (p_CurrentNode->posX)];
+            p_Neighbours[3] = &nodes[numSameDirection][lastDir][(p_CurrentNode->posY + 1) * NUM_COLUMNS + (p_CurrentNode->posX)];
+
+        //we dont check the neighbour in the same direction we came from
+        switch (p_CurrentNode->lastDirections[2])
+        {
+            case Direction::Left:
+                p_Neighbours[1] = nullptr; //remove right neighbour
+                break;
+            case Direction::Right:
+                p_Neighbours[0] = nullptr;
+                break;
+            case Direction::Up:
+                p_Neighbours[3] = nullptr;
+                break;
+            case Direction::Down:
+                p_Neighbours[2] = nullptr;
+                break;
+        }
+
+        if(numSameDirection == MAX_SAME_DIRECTION - 1)
+        {
+            //we can't go in the same direction again, so we remove the neighbour in the same direction as the last 3 directions
+            switch (p_CurrentNode->lastDirections[2])
+            {
+                case Direction::Left:
+                    p_Neighbours[0] = nullptr; //remove left neighbour
+                    break;
+                case Direction::Right:
+                    p_Neighbours[1] = nullptr;
+                    break;
+                case Direction::Up:
+                    p_Neighbours[2] = nullptr;
+                    break;
+                case Direction::Down:
+                    p_Neighbours[3] = nullptr;
+                    break;
+                default: //should never happen
+                    assert(false);
+            }
+        }
 
         //for each neighbour we calculate the cost to get to it
         for (int i = 0; i < 4; ++i)
@@ -162,12 +255,13 @@ void CalculatePath(const Node* const p_TargetNode)
 
             //calculate the cost to get to the neighbour
             const int enteringCost = s_Data[p_Neighbours[i]->posY][p_Neighbours[i]->posX] - '0';
-            unsigned int cost = p_CurrentNode->cost + enteringCost;
-            if (p_CurrentNode->lastDirections[0] == p_CurrentNode->lastDirections[1] && p_CurrentNode->lastDirections[1] == p_CurrentNode->lastDirections[2] && p_CurrentNode->lastDirections[2] == direction)
-                cost += 100000; //penalize going in the same direction 3 times in a row
+            const unsigned int cost = p_CurrentNode->cost + enteringCost;
+            //we remove invalid neighbours already, so this should never happen
+            // if (p_CurrentNode->lastDirections[0] == p_CurrentNode->lastDirections[1] && p_CurrentNode->lastDirections[1] == p_CurrentNode->lastDirections[2] && p_CurrentNode->lastDirections[2] == direction)
+            //     cost += 100000; //penalize going in the same direction 3 times in a row
 
-            //check if the cost is lower than the neighbour's cost
-            if (cost < p_Neighbours[i]->cost || (cost <= p_Neighbours[i]->cost && p_CurrentNode->lastDirections[2] != direction))  //if the cost are the same, we prefer to not go in the same direction as the last node
+            //check if the cost is lower than the existing neighbour's cost
+            if (cost < p_Neighbours[i]->cost)
             {
                 //update the neighbour's cost
                 p_Neighbours[i]->cost = cost;
@@ -177,9 +271,9 @@ void CalculatePath(const Node* const p_TargetNode)
                 p_Neighbours[i]->lastDirections[2] = direction;
 
                 //check if the neighbour is in the open list
-                const bool inOpenList = std::find(openList.begin(), openList.end(), p_Neighbours[i]) != openList.end();
+                const auto openListIt = std::find(openList.begin(), openList.end(), p_Neighbours[i]);
 
-                if (!inOpenList)
+                if (openListIt == openList.end())
                 {
                     //add the neighbour to the open list
                     openList.push_back(p_Neighbours[i]);
@@ -192,29 +286,40 @@ void CalculatePath(const Node* const p_TargetNode)
 int main(int argc, char* argv[])
 {
     //First we create nodes for each position in the array
-    nodes.resize(NUM_ROWS * NUM_COLUMNS);
-    for (int y = 0; y < NUM_ROWS; ++y)
-    {
-        for (int x = 0; x < NUM_COLUMNS; ++x)
+    for(int j = 0; j < NUM_DIRECTIONS; ++j)
+        for(int i = 0; i < MAX_SAME_DIRECTION; ++i)
         {
-            nodes[y * NUM_COLUMNS + x].posX = x;
-            nodes[y * NUM_COLUMNS + x].posY = y;
+            nodes[i][j].resize(NUM_ROWS * NUM_COLUMNS);
+            for (int y = 0; y < NUM_ROWS; ++y)
+            {
+                for (int x = 0; x < NUM_COLUMNS; ++x)
+                {
+                    nodes[i][j][y * NUM_COLUMNS + x].posX = x;
+                    nodes[i][j][y * NUM_COLUMNS + x].posY = y;
+
+                }
+            }
         }
-    }
 
-    //add the first node to the open list
-    Node* const p_FirstNode = nodes.data();
-    p_FirstNode->cost = 0;
-    openList.push_back(p_FirstNode);
+    const int targetX = NUM_COLUMNS - 1;
+    const int targetY = NUM_ROWS - 1;
+    
+    CalculatePath(0, 0, targetX, targetY);
 
-    const Node* const p_TargetNode = &nodes[NUM_ROWS * NUM_COLUMNS - 1];
+    //Find the target node with the lowest cost
+    const Node* p_BestTargetNode = nullptr;
+    for(int j = 0; j < NUM_DIRECTIONS; ++j)
+        for(int i = 0; i < MAX_SAME_DIRECTION; ++i)
+        {
+            const Node* p_TargetNode = &nodes[i][j][targetY * NUM_COLUMNS + targetX];
+            if (!p_BestTargetNode || p_TargetNode->cost < p_BestTargetNode->cost)
+                p_BestTargetNode = p_TargetNode;
+        }
 
-    CalculatePath(p_TargetNode);
-
-    //now we have the shortest path, we can print the cost for the last node
-    std::cout << "Shortest path cost: " << p_TargetNode->cost << std::endl;
-
-    PrintMapWithPath(p_FirstNode, p_TargetNode);
+    // //now we have the shortest path, we can print the cost for the last node
+    std::cout << "Shortest path cost: " << p_BestTargetNode->cost << std::endl;
+    //
+    PrintMapWithPath(p_BestTargetNode);
     
     return 0;
 }
